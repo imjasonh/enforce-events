@@ -8,15 +8,13 @@ package main
 // NOTE: these types will eventually be made available as part of a Chainguard
 // SDK along with our API clients.
 
-import cloudevents "github.com/cloudevents/sdk-go/v2"
-
 // Occurrence is the CloudEvent payload for events.
 type Occurrence struct {
 	Actor *Actor `json:"actor,omitempty"`
 
 	// Body is the resource that was created.
-	// For this sample, it will always be ImagePolicyRecord.
-	Body ImagePolicyRecord `json:"body,omitempty"`
+	// For this sample, it will always be RegistryPush.
+	Body RegistryPush `json:"body,omitempty"`
 }
 
 // Actor is the event payload form of which identity was responsible for the
@@ -24,42 +22,46 @@ type Occurrence struct {
 type Actor struct {
 	// Subject is the identity that triggered this event.
 	Subject string `json:"subject"`
+
+	// Actor contains the name/value pairs for each of the claims that were
+	// validated to assume the identity whose UIDP appears in Subject above.
+	Actor map[string]string `json:"act,omitempty"`
 }
 
-// ChangedEventType is the cloudevents event type for validation state change for policy.
-const ChangedEventType = "dev.chainguard.policy.validation.changed.v1"
+// ChangedEventType is the cloudevents event type for registry push events.
+const PushEventType = "dev.chainguard.registry.push.v1"
 
-const (
-	// NewChange is for new policy state.
-	NewChange = "new"
-	// DegradedChange says the policy was passing and now is failing.
-	DegradedChange = "degraded"
-	// ImprovedChange says the policy was failing and now is passing.
-	ImprovedChange = "improved"
-)
+// RegistryPush describes an item being pushed to the registry.
+type RegistryPush struct {
+	// Repository identifies the repository being pushed
+	Repository string `json:"repository"`
 
-// ImagePolicyRecord is policy states for an image in a cluster.
-type ImagePolicyRecord struct {
-	// ClusterID identifies the specific cluster the Request pertains to.
-	ClusterID string `json:"cluster_id,omitempty"`
-	// ImageID that this ExistenceRecord belongs to.
-	ImageID string `json:"image_id,omitempty"`
-	// LastSeen is the last time we've seen this image_id anywhere on this cluster.
-	LastSeen *cloudevents.Timestamp `json:"last_seen,omitempty"`
-	// Policies are a map of policy name to policy state that apply to this image.
-	Policies map[string]*State `json:"policies,omitempty"`
+	// Tag holds the tag being pushed, if there is one.
+	Tag string `json:"tag,omitempty"`
+
+	// Digest holds the digest being pushed.
+	// Digest will hold the sha256 of the content being pushed, whether that is
+	// a blob or a manifest.
+	Digest string `json:"digest"`
+
+	// Type determines whether the object being pushed is a manifest or blob.
+	Type string `json:"type"`
+
+	// When holds when the push occurred.
+	//When civil.DateTime `json:"when"`
+
+	// Location holds the detected approximate location of the client who pulled.
+	// For example, "ColumbusOHUS" or "Minato City13JP".
+	Location string `json:"location"`
+
+	// UserAgent holds the user-agent of the client who pulled.
+	UserAgent string `json:"user_agent" bigquery:"user_agent"`
+
+	Error *Error `json:"error,omitempty"`
 }
 
-// State is the state of a policy and how it has changed.
-type State struct {
-	// LastChecked is the time the information was last updated.
-	LastChecked *cloudevents.Timestamp `json:"last_checked,omitempty"`
-	// Valid is if the image passes the policy.
-	Valid bool `json:"valid"`
-	// Diagnostic holds any diagnostic messages surfaced during the evaluation
-	// of this policy.
-	Diagnostic string `json:"diagnostic,omitempty"`
-	// Change is the kind of change we have seen for this image between checks.
-	// Can be [Empty, "new", "degraded", "improved"]
-	Change string `json:"change,omitempty"`
+type Error struct {
+	Status  int    `json:"status"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

@@ -78,7 +78,7 @@ func main() {
 		}
 
 		// We are handling a specific event type, so filter the rest.
-		if event.Type() != ChangedEventType {
+		if event.Type() != PushEventType {
 			return nil
 		}
 
@@ -87,35 +87,20 @@ func main() {
 			return cloudevents.NewHTTPResult(http.StatusInternalServerError, "unable to unmarshal data: %w", err)
 		}
 
-		for name, pol := range data.Body.Policies {
-			if pol.Valid {
-				// Not in violation of policy
-				continue
-			}
-			switch pol.Change {
-			case ImprovedChange:
-				// TODO: How is this an improvement?
-				continue
-			case NewChange, DegradedChange:
-				// We want to fire on these events.
-			}
-
-			issue, _, err := client.Issues.Create(ctx, env.GithubOrg, env.GithubRepo, &github.IssueRequest{
-				Title:  ptr(fmt.Sprintf("Policy %s failed", name)),
-				Labels: &env.Labels,
-				Body: ptr(strings.Join([]string{
-					fmt.Sprintf("Image:        `%s`", data.Body.ImageID),
-					fmt.Sprintf("Cluster       `%s`", data.Body.ClusterID),
-					fmt.Sprintf("Policy:       `%s`", name),
-					fmt.Sprintf("Last Checked: `%v`", pol.LastChecked.Time),
-					fmt.Sprintf("Diagnostic:   `%v`", pol.Diagnostic),
-				}, "\n")),
-			})
-			if err != nil {
-				return cloudevents.NewHTTPResult(http.StatusInternalServerError, "unable to create GitHub issue: %w", err)
-			}
-			log.Printf("Opened issue: %d", issue.GetNumber())
+		issue, _, err := client.Issues.Create(ctx, env.GithubOrg, env.GithubRepo, &github.IssueRequest{
+			Title:  ptr(fmt.Sprintf("Image was pushed: %s", data.Body.Repository)),
+			Labels: &env.Labels,
+			Body: ptr(strings.Join([]string{
+				fmt.Sprintf("Tag:       `%s`", data.Body.Tag),
+				fmt.Sprintf("Digest     `%s`", data.Body.Digest),
+				fmt.Sprintf("UserAgent: `%s`", data.Body.UserAgent),
+				fmt.Sprintf("Subject:   `%s`", data.Actor.Subject),
+			}, "\n")),
+		})
+		if err != nil {
+			return cloudevents.NewHTTPResult(http.StatusInternalServerError, "unable to create GitHub issue: %w", err)
 		}
+		log.Printf("Opened issue: %d", issue.GetNumber())
 
 		return nil
 	}
